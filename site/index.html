@@ -1,0 +1,437 @@
+<!DOCTYPE html>
+<html lang="zh-CN">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1" />
+<title>年报语调操纵审计 Agent · 在线审计任意 A 股</title>
+<meta name="description" content="输入任意 A 股股票，实时获取年报与财务数据，比对管理层讨论与分析（MD&A）语调与财务基本面（水平与同比变化），输出带证据链的审计风险预警。" />
+<link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+<header class="topbar">
+  <div class="topbar-inner">
+    <div class="brand">
+      <span class="brand-mark">审</span>
+      <div>
+        <strong>年报语调操纵审计 Agent</strong>
+        <span>MD&A 语调 × 财务基本面 · 背离度证据链审计</span>
+      </div>
+    </div>
+    <div class="topbar-tags">
+      <span class="tag tag-live">在线实时审计</span>
+      <span class="tag">2026 Qoder StudyHack</span>
+    </div>
+  </div>
+</header>
+
+<main class="dossier">
+  <section class="search-panel" aria-label="股票搜索">
+    <p class="case-kicker">在线审计 · LIVE AUDIT</p>
+    <div class="search-row">
+      <div class="search-box">
+        <input id="stock-input" type="text" placeholder="输入股票名称或代码，如：平安银行 / 000001" autocomplete="off" aria-label="股票名称或代码" />
+        <div class="suggest" id="suggest" role="listbox"></div>
+      </div>
+      <select id="year-select" aria-label="审计年度" disabled>
+        <option value="">先选择股票</option>
+      </select>
+      <button id="run-audit" class="btn-primary" type="button" disabled>开始审计</button>
+    </div>
+    <p class="quota-line" id="quota-line"></p>
+    <div class="run-progress hidden" id="run-progress" aria-live="polite">
+      <div class="run-progress-head">
+        <span class="run-progress-title"><span class="pulse-dot" aria-hidden="true"></span>审计进行中，请稍候</span>
+        <span class="mono run-progress-count" id="run-count">1 / 7</span>
+        <span class="mono run-elapsed" id="run-elapsed" aria-label="已用时间">00:00</span>
+      </div>
+      <div class="run-bar" role="progressbar" aria-label="审计进度" aria-valuemin="0" aria-valuemax="100" aria-valuenow="0" id="run-bar">
+        <div class="run-bar-fill" id="run-bar-fill"></div>
+      </div>
+      <ul class="run-steps" id="run-steps"></ul>
+    </div>
+    <p class="run-status" id="run-status">搜索并选择一只 A 股股票，选择审计年度后开始审计。全程约 1–3 分钟（含年报下载与千问打分）。</p>
+  </section>
+
+  <div id="result" class="hidden">
+  <section class="case-head" aria-labelledby="case-title">
+    <p class="case-kicker">审计档案 · CASE FILE</p>
+    <h1 id="case-title"></h1>
+    <p class="case-meta" id="case-meta"></p>
+  </section>
+
+  <section class="verdict" id="verdict" aria-labelledby="verdict-title">
+    <span class="stamp" id="verdict-stamp" aria-hidden="true">审计预警</span>
+    <p class="verdict-kicker">LEADER AGENT 审计结论</p>
+    <h2 id="verdict-title"></h2>
+    <p class="verdict-reason" id="verdict-reason"></p>
+    <p class="verdict-note">结论为审计风险预警，非违法事实认定；措辞遵循“存在掩盖财务恶化的嫌疑 / 需要进一步核查”的审慎表述。</p>
+  </section>
+
+  <section class="metrics" aria-label="核心审计指标">
+    <article class="metric metric-div" id="m-div-card">
+      <span class="metric-label">背离度（判定主轴）</span>
+      <span class="metric-value mono"><span id="m-divergence"></span><span class="metric-unit">= 语调 − 财务最差分位</span></span>
+      <span class="metric-pill" id="m-div-grade"></span>
+      <span class="metric-hint" id="m-div-hint"></span>
+      <a class="ev-link" href="#method">判据：分位带与阈值来源 ↓</a>
+    </article>
+    <article class="metric">
+      <span class="metric-label">语调虚高指数</span>
+      <span class="metric-value mono"><span id="m-sentiment"></span><span class="metric-unit">/ 100</span></span>
+      <div class="meter" role="img" aria-label="语调虚高指数">
+        <div class="meter-fill" id="m-sentiment-bar"></div>
+      </div>
+      <span class="metric-hint">qwen-plus 评估表述相对数据支撑的膨胀程度，<b>越高越可疑</b>；不单独触发报警，只进入背离度。
+        <span id="m-sentiment-meta"></span></span>
+      <a class="ev-link" href="#claims-title">证据：管理层关键论点（段号已校验，点条目可跳原文）↓</a>
+      <a class="ev-link ev-link-xcheck" href="#lexical">交叉验证：词典法词频（独立于模型，不作证据）↓</a>
+    </article>
+    <article class="metric">
+      <span class="metric-label">财务基本面 · 水平分</span>
+      <span class="metric-value mono"><span id="m-health"></span><span class="metric-unit">/ 100</span></span>
+      <span class="metric-pill" id="m-health-level"></span>
+      <span class="metric-hint" id="m-health-hint">规则引擎：营收/利润增速 + 经营现金流与净现比 + 扣非结构 + F-Score</span>
+      <a class="ev-link" id="m-health-link" href="#fin-table">证据：财务明细审计年度行 ↓</a>
+    </article>
+    <article class="metric">
+      <span class="metric-label">财务基本面 · 同比变化</span>
+      <span class="metric-value mono"><span id="m-change"></span><span class="metric-unit">分</span></span>
+      <span class="metric-pill" id="m-change-level"></span>
+      <span class="metric-hint" id="m-change-hint">同一套规则在「少最后一年」的窗口上重算，差值即恶化幅度</span>
+      <a class="ev-link" href="#fin-table">证据：五年财务轨迹 ↓</a>
+    </article>
+    <article class="metric">
+      <span class="metric-label">正面词占比（词典法）</span>
+      <span class="metric-value mono"><span id="m-lexical"></span><span class="metric-unit">% 占比</span></span>
+      <span class="metric-hint" id="m-lexical-hint">正面词 ÷（正面+不利词）全文非重叠统计，是情绪词构成比，不是乐观程度</span>
+      <a class="ev-link" href="#lexical">证据：词频与段落定位 ↓</a>
+    </article>
+    <article class="metric">
+      <span class="metric-label">不利结果词命中</span>
+      <span class="metric-value mono"><span id="m-neghits"></span><span class="metric-unit">次</span></span>
+      <span class="metric-hint" id="m-neghits-hint"></span>
+      <a class="ev-link" href="#lex-neg">证据：不利词 Top 与段落号 ↓</a>
+    </article>
+  </section>
+
+  <section class="charts" aria-label="财务轨迹">
+    <article class="chart-card">
+      <h3>归母净利润同比增速（%）</h3>
+      <p class="chart-sub" id="chart-yoy-sub"></p>
+      <svg id="chart-yoy" viewBox="0 0 520 240" role="img" aria-label="归母净利润同比增速柱状图"></svg>
+    </article>
+    <article class="chart-card">
+      <h3>营业收入（亿元）</h3>
+      <p class="chart-sub" id="chart-rev-sub"></p>
+      <svg id="chart-rev" viewBox="0 0 520 240" role="img" aria-label="营业收入折线图"></svg>
+    </article>
+  </section>
+
+  <section class="quality" id="quality" aria-label="盈余质量与现金流验证">
+    <h3>盈余质量验证 · 账面利润有没有变成现金</h3>
+    <p class="quality-sub" id="quality-sub"></p>
+    <div class="quality-metrics" id="quality-metrics"></div>
+    <div class="fscore-wrap">
+      <h4>Piotroski F-Score 九项分解（盈利质量与杠杆、周转的同比变化）</h4>
+      <ul id="fscore-items" class="fscore-list"></ul>
+      <p class="fscore-note" id="fscore-note"></p>
+    </div>
+    <p class="quality-note">
+      语调审计的核心判据不是“利润好不好看”，而是利润有没有现金支撑：经营现金流由收付实现制确认，
+      难以像应计利润那样被会计估计调节。因此把净利润与经营现金流、扣非净利润并列比对，
+      并叠加 Piotroski（2000）F-Score 的九项基本面变化，作为衡量“乐观语调是否有财务依据”的硬证据。
+      银行、保险、证券的经营现金流受客户存贷款与同业往来主导，净现比不计入评分、仅作参考。
+    </p>
+  </section>
+
+  <section class="evidence" id="evidence" aria-label="审计证据">
+    <article class="evidence-photo">
+      <h3>PDF 语调证据 · 正面语气词整页密集高亮（Top-3 命中页）</h3>
+      <a class="pdf-open hidden" id="pdf-open" href="#" target="_blank" rel="noopener">在巨潮资讯打开完整年报 PDF ↗</a>
+      <div class="dense-gallery" id="dense-gallery"></div>
+      <p class="evidence-caption" id="dense-caption"></p>
+    </article>
+    <article class="evidence-links" id="claims-panel">
+      <h3>证据链（点击跳转到原文锚点）</h3>
+      <ul id="evidence-list"></ul>
+      <h3 id="claims-title">管理层关键论点 <span class="claims-audit" id="claims-audit"></span></h3>
+      <ul id="claims-list"></ul>
+    </article>
+  </section>
+
+  <section class="facts" id="facts" aria-label="事实核对证据">
+    <h3>事实核对 · 第三个 Agent 判「这件事到底是好是坏」</h3>
+    <p class="facts-sub" id="facts-sub"></p>
+    <ul class="facts-list" id="facts-list"></ul>
+    <div class="facts-conflicts" id="facts-conflicts"></div>
+    <p class="facts-note">
+      这一栏不打分、不评语调，只回答每项重要变化的<b>事实方向</b>：指标是什么、口径期间、原因归属（主营/一次性/外部）、
+      与收入·利润率·现金流·销量是否一致。<b>明确禁止用「增长/下降/改善/减少」这些词的正负面去推方向</b>——
+      成本下降只有在经营规模稳定或利润率改善时才偏利好，收入同步下滑时的降本更可能是被动收缩。
+      输入是确定性抽取的结构化摘录（含数值或财务指标名词的段落），选段规则可复现；
+      引用只能用摘录里出现过的段号，模型引到未选入的段号会被直接丢弃。
+      它与词典法各管一半：词典法数「表述立场」，这一栏给「事实方向」，两者的差才是语调操纵。
+    </p>
+  </section>
+
+  <section class="lexical" id="lexical" aria-label="词典法交叉验证">
+    <h3>词典法交叉验证 · 年报 MD&A 全文实时高亮</h3>
+    <p class="lexical-role">这一栏是独立于模型的词面统计，用来对照表述立场；它按定义不包含「是否有数据支撑」这一维，因此<b>不作为语调虚高指数的证据</b>——两者不一致时，结论应回到事实核对与财务分位去判，而不是挑其中一个数当真。</p>
+    <p class="lexical-sub" id="lexical-sub"></p>
+    <div class="lexical-metrics" id="lexical-metrics"></div>
+    <div class="lexical-words">
+      <div class="word-col">
+        <h4>正面语气词 Top（点击段落号跳转原文）</h4>
+        <ul id="lex-pos" class="word-bars"></ul>
+      </div>
+      <div class="word-col">
+        <h4>不利结果词 Top（点击段落号跳转原文）</h4>
+        <ul id="lex-neg" class="word-bars"></ul>
+      </div>
+    </div>
+    <div class="density-wrap">
+      <span class="density-label">段落乐观密度热力带（绿=正面占优 / 红=不利占优，点击跳转该段）</span>
+      <div class="density-strip" id="density-strip"></div>
+    </div>
+    <div class="reader-head">
+      <span class="legend">
+        <i class="mk mk-pos"></i>正面语气词
+        <i class="mk mk-neg"></i>不利结果词
+        <i class="mk mk-risk"></i>风险披露词
+      </span>
+      <span class="reader-toggles">
+        <label><input type="checkbox" data-cat="pos" checked /> 正面</label>
+        <label><input type="checkbox" data-cat="neg" checked /> 不利</label>
+        <label><input type="checkbox" data-cat="risk" checked /> 风险</label>
+      </span>
+    </div>
+    <div class="mda-reader" id="mda-reader"></div>
+    <p class="lexical-note">
+      高亮由浏览器端词典法对年报 MD&A 全文做非重叠匹配生成（与 Python 版 analyze_lexical_tone 同一词表与规则）；
+      风险披露词（如“风险”“诉讼”）反映披露强度而非悲观情绪，单列不计入正/负面比。
+      表格行与纯数字片段中的“减少/增长”属于算术方向而非情绪表述，已从占比统计中剔除，但仍在原文高亮中保留以便核对。
+      正面词占比与 qwen-plus 的语调虚高指数是<b>两种不同量纲</b>：前者是情绪词的构成比例，后者衡量表述相对其数据支撑的膨胀程度，
+      两者不一致时说明文本以事实陈述承载正面词汇，应作为需要进一步解读的信号，而非某一方算错。
+    </p>
+  </section>
+
+  <section class="table-wrap" aria-label="财务明细">
+    <h3>年度财务明细（东方财富实时数据）</h3>
+    <div class="table-scroll">
+      <table id="fin-table">
+        <thead>
+          <tr><th>年度</th><th>营业收入（亿元）</th><th>归母净利润（亿元）</th><th>经营现金流（亿元）</th><th>净现比</th><th>营收同比/变动</th><th>净利润同比/变动</th></tr>
+        </thead>
+        <tbody></tbody>
+      </table>
+    </div>
+    <p class="table-note">金额由元换算为亿元；负增长以红色标注；<strong id="table-note-year">审计年度行</strong>已高亮并可作为财务证据锚点。净现比 = 经营现金流 ÷ 归母净利润，金融类企业该指标仅作参考。同比列的口径说明：增速的分母是<strong>基期绝对值</strong>，基期接近 0 或与本期异号时它不再是增长率而是比值（例如基期 +0.03 亿、本期 −0.51 亿会算出 −1706%），此时该列改显示绝对额变动（亿元）或「由正转负／由负转正」。</p>
+  </section>
+
+  <section class="interrogation" aria-label="AI 审讯室">
+    <h3>AI 审讯室 · 追问主审分析师</h3>
+    <p class="interrogation-sub">基于本次审计上下文实时调用 qwen-max，可继续追问背离判定、具体数字与证据。</p>
+    <div class="chat" id="chat-log"></div>
+    <div class="chat-input-row">
+      <input id="chat-input" type="text" placeholder="例如：为什么你觉得这家公司在粉饰太平？请结合具体数字说明。" aria-label="追问输入" />
+      <button id="chat-send" class="btn-primary" type="button">追问</button>
+    </div>
+  </section>
+
+  <section class="report" aria-label="尽调报告导出">
+    <div class="report-head">
+      <div>
+        <h3>导出尽调报告</h3>
+        <p>汇总公司与代码、红绿灯结论、量化指标、Agent 审计结论、证据链与词典法词频，生成标准 Markdown。</p>
+      </div>
+      <button id="download-report" class="btn-primary" type="button">下载尽调报告（.md）</button>
+    </div>
+    <pre id="report-preview" class="report-preview" tabindex="0"></pre>
+  </section>
+  </div>
+
+  <section class="method" id="method" aria-label="方法论">
+    <h3>方法论 · 四 Agent 协同</h3>
+    <ol class="method-steps">
+      <li><strong>TextSentimentAgent（qwen-plus）</strong>：分块阅读 MD&A，输出 0–100「语调虚高指数」（越高表示表述越缺乏数据支撑、越可能在粉饰太平）与带段号的关键论点。</li>
+      <li><strong>FinancialHealthAgent（规则引擎）</strong>：基于东方财富年报的营收、归母净利润、经营现金流、扣非净利润与 F-Score 输入，计算同比、净现比，输出两个数——<b>水平分</b>（本年度基本面）与<b>同比变化分</b>（同一套规则在少一年的窗口上重算后的差值）。Piotroski F-Score 在这里是<b>被引用的输入项</b>而不是判定锚。</li>
+      <li><strong>FactReviewAgent（qwen-plus，与语调打分并行）</strong>：先按「含计量数值 + 含财务指标名词」确定性抽取结构化摘录，独立核对两次并交叉复核，
+        逐项给出指标类别、比较口径、原因归属（主营/一次性/外部）与相关指标一致性，方向只取利好/利空/中性/证据不足；
+        两次不一致的条目标为「分歧」，不作为结论。它不打分、不评语调，只提供表述立场之外的另一侧。</li>
+      <li><strong>LeaderAgent（qwen-max）</strong>：比对背离度、财务分位与事实核对结论，强制复核红线，输出带证据链的预警。</li>
+    </ol>
+
+    <h4>现金流恶化怎么计量：按缺口占上年营收，不按现金流自身增速</h4>
+    <p class="method-note">
+      经营现金流同比的分母是基期绝对值，而基期正是那个正在塌的数：基期
+      <span class="mono">+0.03 亿元</span>、本期 <span class="mono">−0.51 亿元</span> 会报出
+      <span class="mono">−1706%</span>，可绝对缺口只有 <span class="mono">0.54 亿元</span>，
+      相对这家公司 <span class="mono">4.25 亿元</span> 的上年营收是 12.8%。旧规则按
+      <span class="mono">增速 ≤ −20%</span> 一律扣 20 分，等于把「几百万基数的小抖动」和
+      「几十亿的真塌方」记成同一个数。现在按 <b>Δ ÷ 上年营业收入</b> 分档：
+      <span class="mono">≤ −15%</span> 扣 20 分、<span class="mono">≤ −5%</span> 扣 10 分，
+      绝对缺口不足 <span class="mono">0.2 亿元</span> 的既不扣分也不进异常列表
+      （上年营收取不到时退回旧口径，不留一个无声的「不扣分」）。异常条目里直接写出
+      「缺口相当于上年营收的 X%」，判分依据在界面上就能核对。
+    </p>
+    <p class="method-note">
+      阈值不是拍的：在 200 家真实公司的现金流下降样本上，Δ ÷ 上年营收的经验分布是
+      <span class="mono">p10 −19.2%　p25 −13.1%　p50 −6.2%　p75 −3.1%　p90 −1.9%</span>，
+      于是 −15% 落在下降样本的第 10 到第 25 百分位之间（即「同行里最差的那一到两成」）、−5% 大致贴着中位数。绝对额下限的取值也测过：
+      0.2 亿在这批样本上只挡掉 1 家 mild 档，0.5 亿会连挡 2 家真实的前 15% 缺口，所以取 0.2 亿。
+      分母之所以用<b>上年</b>而不是本年营收：本年营收自己也在塌的时候，同一个缺口会被算两次
+      （晶升股份 2025 年营收 −72.8%，同一笔 0.54 亿缺口用本年营收会读成 47% 而不是 12.8%）。
+      口径变更后 27708 个水平分全部重算，下面的分位带与切点都来自重跑的那一轮普查。
+    </p>
+
+    <h4>判据：看缺口，不看单点阈值</h4>
+    <p class="method-formula">
+      <b>背离度 = 语调虚高指数 − 财务基本面「最差一侧」的百分位</b>（水平分位与同比变化分位取较小者）。
+      财务侧之所以用百分位而不是原始分：普查测出水平原始分的 p1–p99 跨
+      <span id="ref-spread" class="mono"></span> 分，而语调指数只在中高段走动，
+      两个量纲相差一个数量级的数相减，差值的方差几乎全来自财务侧——那样「背离度」会退化成财务分的负数镜像，
+      语调高已经无所谓了。换成百分位后两侧同为 0–100，缺口才真的表示「表述相对基本面的超出量」。
+    </p>
+    <ul class="method-bands">
+      <li><span class="pill-red">红线</span>背离度 ≥ <span id="cut-red" class="mono"></span> → 判定异常（强制，模型不可推翻）</li>
+      <li><span class="pill-amber">黄线</span>背离度 ≥ <span id="cut-amber" class="mono"></span> → 需核查</li>
+      <li><span class="pill-green">绿线</span>其余情形 → 表述与基本面未见明显缺口</li>
+    </ul>
+    <p class="method-note">
+      红线不再另加「财务必须落到后四分之一」这个条件：语调上限是 100，缺口能到
+      <span id="cut-red-echo" class="mono"></span> 本身就意味着财务最差一侧不高于 50 百分位，
+      再加条件是重复约束。「后四分之一」（百分位 ≤ 25）只用于在理由里说明是水平偏弱还是正在恶化。
+      旧版红线是「语调 &gt; 80 且健康分 &lt; 50」，两个数都没有实测依据——实测水平分的第 50 百分位是
+      <span id="ref-p50-all" class="mono"></span>，所以「低于 50」实际把将近一半的公司称作「较差」——
+      而且这条红线在任何一家真实公司上都没有触发过。现在「是否恶化」交给可复现的分位带，「是否掩饰」交给缺口本身。
+    </p>
+    <p class="method-note" id="basis-note">
+      <b>切点的实测依据</b>：把 <span class="mono">min(水平分位, 同比变化分位)</span> 记作「最差一侧」，
+      它在这 <span id="basis-n" class="mono"></span> 个观测上的经验分布是
+      <span id="basis-quantiles" class="mono"></span>。于是红线缺口对应的全市场基础命中率为
+      <span id="basis-rates" class="mono"></span>——
+      也就是说，即使一家公司语调虚高指数高达 88，也只有当它的财务最差一侧落到约第 23 百分位以内时才会亮红灯。
+      这些数字由函数实时从参照分布算出，不是写死的文案。
+    </p>
+
+    <h4>分位带的来源：全市场普查，不是抽样</h4>
+    <p class="method-note" id="reference-note">
+      分位带由本仓库同一套规则 <span class="mono">scoreRows</span> 对全市场 A 股年报行逐条打分算出：
+      名录 <b><span id="ref-universe" class="mono"></span> 家</b>，成功取到可比年报
+      <b><span id="ref-companies" class="mono"></span> 家</b> /
+      <b><span id="ref-observations" class="mono"></span> 个年度观测 /
+      <span id="ref-changes" class="mono"></span> 个同比变化观测</b>，年度覆盖
+      <span id="ref-years" class="mono"></span>，生成于 <span id="ref-date" class="mono"></span>。
+      因为是普查而非抽样，这里没有抽样误差；数据只取东方财富公开财务接口，不下载年报、不调用模型，可离线重跑复现。
+      银行/保险/证券与实体企业分组建带（两类公司的经营现金流口径不可比，混在一个分布里会互相污染），
+      组内观测不足时自动退回全市场带，实际用了哪一组写在财务卡片上。
+      「后四分之一」的具体刻度：实体企业水平分第 25 百分位 = <span id="ref-p25-entity" class="mono"></span>，
+      金融类 = <span id="ref-p25-financial" class="mono"></span>，同比变化分第 25 百分位分别为
+      <span id="ref-c25-entity" class="mono"></span> 与 <span id="ref-c25-financial" class="mono"></span>。
+    </p>
+
+    <h4>判定用哪个池子：行业带优先</h4>
+    <p class="method-note">
+      同一个降幅，在板块普跌与板块独跌两种语境下性质完全不同：对常年增长、眼下遭遇行业周期底部的公司，它叫<b>增长失速</b>；
+      对本来就站在边缘的公司，它叫<b>生死存亡</b>。所以分位定位按
+      <b>一级板块 → 实体/金融 → 全市场</b> 依次退回，并如实写出最终用的是哪一层。
+      行业归属来自东方财富 <span class="mono">RPT_F10_ORG_BASICINFO</span> 的官方一级板块，
+      免 Key、单公司一次请求；取不到就退回上一层，绝不猜一个行业把公司塞进错误的池子。
+      实测一级板块 31 组，其中 <b><span id="industry-count" class="mono"></span> 组</b>观测数达到建带门槛
+      <span id="min-industry-n" class="mono"></span>，合计覆盖 <b><span id="industry-obs" class="mono"></span> 个观测</b>；
+      未达门槛的组以及名录里全部 355 家北交所 920 号段（接口未给板块归属）不参与行业建带，退回上一层。
+    </p>
+    <h4>优质档自动降档</h4>
+    <p class="method-note">
+      当公司的<b>毛利率与净利率同时处于行业前 5%</b> 时，预警级别下调一档（红 → 黄，黄 → 绿）。
+      两个指标都要满足，是为了避免单季波动带偏；且必须同池比较——银行的高净利率和白酒的高净利率不是同一件事。
+      <b>降档只改级别，不改分数</b>：分数、原始档位与降档理由都保留在结论里，
+      读者看到的不是被悄悄调柔的结论，而是一条可核查的规则。
+      降档后核查重点相应改变——不再是「是否掩盖恶化」，而是
+      <b>「是否把周期性失速表述为稳健增长」</b>：盈利质量仍在行业头部，不等于当期增速可以被讲成增长。
+    </p>
+    <p class="method-note">
+      这条规则的代价必须一并写明：按行业定位会在<b>板块系统性下行</b>时给出更宽松的档位——
+      如果整个行业一起恶化，「相对同行不差」会掩盖「相对自己的历史表述过满」。
+      本工具选择接受这个代价，理由是行业内的横向可比性更强（共同的会计与现金流口径冲击会在组内部分抵消），
+      并且界面同时保留全市场口径的定位池说明；但结论应据此理解为「与同行相比的表述缺口」，不是「与公司历史相比的表述缺口」。
+    </p>
+
+    <h4>外部体系对照与使用边界</h4>
+    <p class="method-note">
+      本工具的财务侧刻度是自建的，因此必须交代它和现有权威体系的关系。<b>中国上市公司健康指数</b>
+      （Health Index，HI）：由中关村国睿金融与产业发展研究会在<b>中国上市公司协会学术指导</b>下编制，
+      《中国上市公司健康指数报告（2025）》于 2025-10-16 发布，对 2024 年度 <b>5363</b> 家上市公司做健康诊断，
+      剔除银行 42、非银金融 83、房地产 95 共 220 家特殊行业后，<b>N=5143</b> 的综合健康指数均值 <b>67.17</b>
+      （2023 年为 65.93）；高于均值 2676 家占 <b>52.03%</b>，低于均值 2467 家占 47.97%；
+      <b>80 分以上仅 23 家</b>，全市场第一为贵州茅台 82.61。指标体系为九大系统 / 39 个二级 / 400 余个底层指标，
+      数据源为同花顺。
+    </p>
+    <ul class="method-bands">
+      <li><b>我们借它的只有一件事</b>：0–100 这种刻度惯例在国内已有先例，且其公布的人群分布可作外部参照。它<b>不进入本工具的任何判定阈值</b>。</li>
+      <li><b>构造不同</b>：HI 测的是「健康水平」，含治理、外部监督、内部控制、企业文化等非财务维度；本工具测的是「基本面变化」与「表述与基本面的缺口」。两者不可互换，界面也不显示任何单公司 HI 分数——HI 逐家公司得分不公开，任何换算都等于编造。</li>
+      <li><b>效度层级不同</b>：HI 是行业观察指数，编制方自述「得分高的公司未来绩效更优」，但未见公开可查的同行评审效度检验，故按行业报告而非学术文献引用。本工具引用为判据依据的是 Piotroski（2000, <i>JAR</i>）、Li（2008, <i>The Accounting Review</i>）、Sloan（1996, <i>AR</i>）这类经过同行评审的文献，以及上面那份全市场普查。</li>
+      <li><b>不用「低于均值」当判据</b>：HI 自身 52.03% 的样本高于均值，说明均值落在约第 48 百分位、分布左偏，是被下行长尾拉低的，不是被头部拉高的；而且均值逐年漂移（65.93→67.17），不是固定标尺。本工具一律用分位数而不是均值。</li>
+    </ul>
+
+    <h4>调用额度（已实现，提交版暂未启用）</h4>
+    <p class="method-note">
+      站点是公开可访问的，而每次完整审计要发 5 次 qwen-plus 与 1 次 qwen-max 调用，
+      所以限流迟早要开。规则已经写好：<b>每个 IP 每 24 小时 5 次完整审计</b>；一次审计的 tone / facts / leader 三步共用同一个
+      (股票, 年度) 计数键，只扣 1 格，失败后重试同一步也不会重复扣；审讯室每提问一次扣 1 格。
+      检索、财务、参照分布、PDF 下载不计入额度。
+      <b>当前由 <span class="mono">QUOTA_ENFORCED = false</span> 关闭着</b>：提交版不希望评委或用户
+      被一个尽力而为的额度挡住，上线之后再开。关闭期间界面也不显示剩余额度，
+      避免出现一句和实际行为不一致的约束声明。
+    </p>
+    <p class="method-note">
+      <b>这个强度的限制必须如实描述</b>：计数保存在 edge 实例的进程内存里，
+      <b>不跨实例共享、实例重启即清零</b>。它能挡住绝大多数随手脚本，
+      但<em>不是</em>「每个 IP 全局恰好 5 次」的硬保证。要做成硬保证需要共享状态
+      （Sites 的 Database 能力），那要改函数形态、建表并配置访问策略——目前没有做，
+      因为这会动到已验收通过的生产链路。
+      IP 取自网关写入的 <span class="mono">x-real-ip</span>；实测客户端自送的
+      <span class="mono">X-Real-IP</span> 会被网关覆盖、伪造无效，而
+      <span class="mono">X-Forwarded-For</span> 最左元素可以被客户端任意前置，所以不作为依据。
+    </p>
+
+    <p class="method-note">
+      股票名录与财务数据来自东方财富公开接口，年报 PDF 来自巨潮资讯（请求间隔 ≥2 秒）；PDF 在浏览器本地解析，
+      千问密钥仅存于服务端 Secrets，不经前端。本工具输出的是<b>学术研究用的审计风险线索</b>，
+      不是对财务舞弊的事实认定，也不构成投资建议。
+    </p>
+  </section>
+</main>
+
+<footer class="foot">
+  <p>2026 Qoder 高校创造力大赛（StudyHack 赛道）参赛作品 · 在线版实时运行，全部数字来自所选股票的真实公开数据。</p>
+  <p>审计结论仅为风险预警，不构成投资建议。</p>
+</footer>
+
+<div class="lightbox hidden" id="lightbox" role="dialog" aria-modal="true" aria-labelledby="lightbox-caption">
+  <div class="lightbox-backdrop" id="lightbox-backdrop"></div>
+  <div class="lightbox-panel">
+    <button class="lightbox-close" id="lightbox-close" type="button" aria-label="关闭快照预览">×</button>
+    <div class="lightbox-toolbar" role="group" aria-label="缩放控制">
+      <button type="button" id="zoom-out" class="zoom-btn" aria-label="缩小">−</button>
+      <span class="mono zoom-level" id="zoom-level">100%</span>
+      <button type="button" id="zoom-in" class="zoom-btn" aria-label="放大">＋</button>
+      <button type="button" id="zoom-reset" class="zoom-btn zoom-reset">重置</button>
+      <span class="lightbox-hint">滚轮 / 触控板捏合缩放 · 放大后拖拽平移 · 双击切换 · 键盘 + − 0</span>
+    </div>
+    <div class="lightbox-stage" id="lightbox-stage">
+      <img id="lightbox-img" alt="" draggable="false" />
+    </div>
+    <p class="lightbox-caption" id="lightbox-caption"></p>
+    <a class="lightbox-source hidden" id="lightbox-source" href="#" target="_blank" rel="noopener">在巨潮资讯查看该页原文 ↗</a>
+  </div>
+</div>
+
+<script src="assets/pdf.min.js"></script>
+<script src="assets/api.js"></script>
+<script src="assets/mda.js"></script>
+<script src="assets/lexical.js"></script>
+<script src="assets/snapshot.js"></script>
+<script src="app.js"></script>
+</body>
+</html>
