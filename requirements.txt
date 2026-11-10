@@ -1,15 +1,12 @@
-pydantic>=2.5
-pydantic-settings>=2.1
+# 只列当前两套运行时真正 import 到的包（用 grep 逐个核过，不是模板抄来的）。
+# 数据侧免 key：akshare 取名录，requests 打东方财富与巨潮，pdfplumber/pymupdf 解析年报，jieba 分词。
+# 模型侧：openai SDK 指向阿里云百炼的兼容接口。
+streamlit>=1.30
 pandas>=2.1
-numpy>=1.26
 akshare>=1.14.0
 requests>=2.31.0
-openai>=1.50
-streamlit>=1.30
-pymupdf>=1.24
 pdfplumber>=0.11
+pymupdf>=1.24
 jieba>=0.42
-httpx>=0.27
-tenacity>=8.2
-python-dotenv>=1.0
 plotly>=5.18
+openai>=1.50

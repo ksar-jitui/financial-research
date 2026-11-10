@@ -168,11 +168,14 @@ reference_bands.py                                                  本地运行
 site/            线上版静态前端（含 pdf.js 与浏览器端 MD&A 解析、整页高亮快照）
 functions/       线上版 edge function：lib/agents.ts 是判定内核，lib/reference_bands.ts 是分位带
 _dev/            可复现工具：全市场普查、分位数生成、切点核对、效度与前瞻验证、引擎差测量
-tests/           早期分层原型（app/ agents/ core/ utils/ config/ data/）的测试
 ```
 
-`app/`、`agents/`、`core/`、`utils/`、`config/` 与 `data/{models,acquisition,processing}` 是项目最初的分层原型，
-**当前跑的产品不依赖它们**，只有 `tests/` 在测它们。保留是为了让演进过程可查，删掉会让那批测试失效。
+仓库里只有真正在跑的东西。项目最初的分层原型（`app/ agents/ core/ utils/ config/ data/` 与它的测试）已在
+2026-11-10 移除：它内部还实现着「语调 &gt; 80 且健康分 &lt; 50」这条**已被本工具公开废弃**的旧红线，
+留着会让仓库与产品结论互相矛盾（那条测试跑出来就是红的）。历史里还能翻回来。
+
+本项目的验证不靠单元测试，靠 `_dev/` 里那批可复跑的数字：全市场普查、切点命中率反推、
+百强与同行业负控对照、2024→2025 前瞻检验、以及本地/线上两套引擎的差值实测。
 
 ---
 

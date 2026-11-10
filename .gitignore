@@ -1,36 +1,40 @@
+# ---- 虚拟环境与构建产物 ----
+.venv/
 __pycache__/
-*.pyc
+*.py[cod]
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+*.egg-info/
+dist/
+build/
+
+# ---- 编辑器与系统 ----
+.idea/
+.vscode/
+.qoder/
+.DS_Store
+Thumbs.db
+*.log
+
+# ---- 密钥：进过 git 历史就只能吊销重发，删提交记录也不够 ----
+# .streamlit/* 而不是 .streamlit/：git 无法在被排除的目录里重新纳入文件，
+# 写成目录排除会让下面那份可公开的模板进不了仓库。
 .env
+.streamlit/*
+!.streamlit/secrets.toml.example
+
+# ---- 运行期数据：按股票代码建目录（年报 PDF、语调 txt、快照 PNG）与名录 CSV ----
+# 第三方发布内容且体积已超 29M，不入库；但别退回成整目录排除 data/，
+# 那样会把 data/ 重新变成源码位置时又挡掉代码。
+data/[0-9][0-9][0-9][0-9][0-9][0-9]/
+data/*.csv
 data_storage/pdfs/*
 data_storage/cache/*
 data_storage/exports/*
 !data_storage/**/.gitkeep
-.qoder/
-*.egg-info/
-dist/
-.venv/
 
-# ---- 提交前必须排除的东西（这一批是 2026-11-09 补的）----
-# 真实密钥文件：一旦进入 git 历史就只能吊销重发，删除提交记录也不够。
-# 现有规则只排除了 .env，没排除 Streamlit 的 secrets，这是最危险的一个缺口。
-# 注意用的是 .streamlit/* 而不是 .streamlit/：git 无法在被排除的目录里重新纳入文件，
-# 写成目录排除会让下面那份可公开的模板也进不了仓库。
-.streamlit/secrets.toml
-.streamlit/*
-!.streamlit/secrets.toml.example
-
-# 运行期数据：按股票代码建目录（年报 PDF、语调 txt、高亮快照 PNG）与名录 CSV，
-# 属于第三方发布内容且已超 29M，不入库。
-# 注意别退回成整目录排除 data/：早期分层原型的源码就在 data/{models,acquisition,processing}/，
-# tests/test_data 与 tests/test_core 直接 import 它们，整目录挡掉会让克隆过来的人一跑就 ImportError。
-data/[0-9][0-9][0-9][0-9][0-9][0-9]/
-data/*.csv
-
-# Qoder Sites 的部署描述文件：42K 工具状态，内含云端 project/site/deployment ID 与整份
-# index.html 的 base64。它不是源码，且每发布一次就变一次，入库只会污染历史。
-*.qoder.site
-
-# 普查缓存与一次性跑批产物（7M）。脚本本体保留，缓存不保留。
+# ---- 普查缓存与跑批中间产物（脚本本体保留，缓存不保留）----
 _dev/ref_rows.jsonl
 _dev/ref_rows_v2.jsonl
 _dev/ref_industry.json
@@ -39,21 +43,9 @@ _dev/forward_rows.jsonl
 _dev/validity_rows.jsonl
 _dev/hi_top20.json
 _dev/_*
-_dev/*.log
-_dev/_*.txt
 
-# 已被线上版取代的旧静态档案（1.8M）。
+# ---- 已被线上版取代的旧静态档案 ----
 web/
 
-# 本地环境与编辑器产物
-.venv/
-__pycache__/
-*.py[cod]
-.pytest_cache/
-.mypy_cache/
-.ruff_cache/
-.idea/
-.vscode/
-.DS_Store
-Thumbs.db
-*.log
+# ---- Qoder Sites 部署描述文件：工具状态，含云端 ID 与 index.html 的 base64 ----
+*.qoder.site

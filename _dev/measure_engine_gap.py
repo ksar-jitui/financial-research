@@ -26,10 +26,28 @@ for (const code of CODES) {
 console.log(JSON.stringify(out));
 """ % json.dumps(CODES)
 open("_dev/_ts_scores.mts", "w", encoding="utf-8").write(js)
-env = {"ELECTRON_RUN_AS_NODE": "1", "SystemRoot": "C:\\Windows", "PATH": "C:\\Windows\\system32"}
+
+# 用 Electron 自带的那份 Node 跑 TS：路径每台机器都不同，所以不写死。
+# 优先级：命令行第一个参数 > 环境变量 QODER_ELECTRON > %LOCALAPPDATA% 下的默认安装位置。
+import os
+import shutil
+
+candidates = [
+    sys.argv[1] if len(sys.argv) > 1 else None,
+    os.environ.get("QODER_ELECTRON"),
+    os.path.expandvars(r"%LOCALAPPDATA%\Programs\Qoder CN\Qoder CN.exe"),
+    os.path.expandvars(r"%LOCALAPPDATA%\Qoder CN\Qoder CN.exe"),
+    shutil.which("electron"),
+]
+electron = next((c for c in candidates if c and os.path.exists(c)), None)
+if not electron:
+    print("找不到可用的 Electron 来当 Node 跑：把路径作为参数传进来，或设置 QODER_ELECTRON。")
+    raise SystemExit(2)
+
 proc = subprocess.run(
-    ["C:/Users/zzf07/AppData/Local/Programs/Qoder CN/Qoder CN.exe", "_dev/_ts_scores.mts"],
-    capture_output=True, text=True, encoding="utf-8", env=env, cwd=".",
+    [electron, "_dev/_ts_scores.mts"],
+    capture_output=True, text=True, encoding="utf-8",
+    env={**os.environ, "ELECTRON_RUN_AS_NODE": "1"}, cwd=".",
 )
 if proc.returncode:
     print("TS 侧失败:", proc.stderr[-800:])
