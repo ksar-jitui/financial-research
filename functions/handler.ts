@@ -11,7 +11,15 @@ import {
   DIVERGENCE_RED,
 } from "./lib/agents.ts";
 import { chat, ServiceNotConfigured } from "./lib/dashscope.ts";
-import { AUDITS_PER_WINDOW, clientIp, QUOTA_ENFORCED, quotaSnapshot, quotaState } from "./lib/quota.ts";
+import {
+  AUDITS_PER_WINDOW,
+  CHAT_MESSAGES_PER_WINDOW,
+  clientIp,
+  QUOTA_ENFORCED,
+  quotaSnapshot,
+  quotaState,
+  chatQuotaState,
+} from "./lib/quota.ts";
 
 const JSON_HEADERS = { "Content-Type": "application/json; charset=utf-8" };
 
@@ -186,9 +194,9 @@ export async function handler(req: Request): Promise<Response> {
     if (req.method === "POST" && action === "chat") {
       const body = await readBody(req);
       const messages = Array.isArray(body.messages) ? body.messages : [];
-      // 审讯室每问一次就是一次独立 qwen-max 调用，所以每次提问扣一格；
-      // 用消息条数做 key，同一条提问的重试不会重复扣。
-      const chatQuota = quotaState(ip, `chat:${messages.length}`);
+      // 审讯室单独计数（100 条/24h），不占完整审计的 20 格：一次提问只有 1 次 qwen-max，
+      // 和一次审计的 6 次调用不是一个成本。key 用消息条数，同一条提问的重试不重复扣。
+      const chatQuota = chatQuotaState(ip, `chat:${messages.length}`);
       if (chatQuota.limited) return quotaDenied(chatQuota);
       if (messages.length === 0) return fail("empty_messages");
       const system = String(body.context ?? "");
@@ -196,7 +204,14 @@ export async function handler(req: Request): Promise<Response> {
       return json({ ok: true, reply: await chat("qwen-max", full) });
     }
     if (req.method === "GET" && action === "quota") {
-      return json({ ok: true, ...quotaSnapshot(ip), limit: AUDITS_PER_WINDOW, enforced: QUOTA_ENFORCED, identified: ip !== "" });
+      return json({
+        ok: true,
+        ...quotaSnapshot(ip),
+        limit: AUDITS_PER_WINDOW,
+        chatLimit: CHAT_MESSAGES_PER_WINDOW,
+        enforced: QUOTA_ENFORCED,
+        identified: ip !== "",
+      });
     }
     return fail("unknown_action", 404);
   } catch (err) {

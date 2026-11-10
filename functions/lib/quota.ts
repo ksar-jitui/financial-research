@@ -34,10 +34,14 @@ export function clientIp(req: Request): { ip: string; source: string } {
 export const QUOTA_ENFORCED = true;
 
 export const AUDITS_PER_WINDOW = 20;
+// 审讯室提问和完整审计是两种完全不同的成本：一次审计 5 次 qwen-plus + 1 次 qwen-max，
+// 一次提问只有 1 次 qwen-max。把它们塞进同一个桶，等于让「多问几句」按 5 倍价格扣额度，
+// 而界面又没法诚实地解释这件事。所以拆成两个独立计数，共用同一个 24 小时窗口。
+export const CHAT_MESSAGES_PER_WINDOW = 100;
 export const WINDOW_MS = 24 * 60 * 60 * 1000;
 const CLEANUP_EVERY = 256;
 
-type Bucket = { windowStart: number; audits: Set<string>; used: number };
+type Bucket = { windowStart: number; audits: Set<string>; used: number; chats: Set<string>; chatUsed: number };
 
 const buckets = new Map<string, Bucket>();
 let operations = 0;
@@ -46,7 +50,7 @@ function bucketFor(ip: string): Bucket {
   const now = Date.now();
   const existing = buckets.get(ip);
   if (existing && now - existing.windowStart < WINDOW_MS) return existing;
-  const fresh: Bucket = { windowStart: now, audits: new Set(), used: 0 };
+  const fresh: Bucket = { windowStart: now, audits: new Set(), used: 0, chats: new Set(), chatUsed: 0 };
   buckets.set(ip, fresh);
   if (++operations % CLEANUP_EVERY === 0) {
     for (const [key, value] of buckets) {
@@ -90,12 +94,53 @@ export function quotaState(
   };
 }
 
+// 审讯室提问单独计数：dedupe key 用消息条数，同一条提问的重试不重复扣。
+export function chatQuotaState(
+  ip: string,
+  dedupeKey: string,
+): { limited: boolean; used: number; remaining: number; resetInMs: number } {
+  if (!QUOTA_ENFORCED || !ip) {
+    return { limited: false, used: 0, remaining: CHAT_MESSAGES_PER_WINDOW, resetInMs: WINDOW_MS };
+  }
+  const bucket = bucketFor(ip);
+  const resetInMs = Math.max(0, WINDOW_MS - (Date.now() - bucket.windowStart));
+  if (bucket.chats.has(dedupeKey)) {
+    return {
+      limited: false,
+      used: Math.min(bucket.chatUsed, CHAT_MESSAGES_PER_WINDOW),
+      remaining: Math.max(0, CHAT_MESSAGES_PER_WINDOW - bucket.chatUsed),
+      resetInMs,
+    };
+  }
+  if (bucket.chatUsed >= CHAT_MESSAGES_PER_WINDOW) {
+    return { limited: true, used: CHAT_MESSAGES_PER_WINDOW, remaining: 0, resetInMs };
+  }
+  bucket.chats.add(dedupeKey);
+  bucket.chatUsed += 1;
+  return {
+    limited: false,
+    used: bucket.chatUsed,
+    remaining: CHAT_MESSAGES_PER_WINDOW - bucket.chatUsed,
+    resetInMs,
+  };
+}
+
 export function quotaSnapshot(ip: string) {
-  if (!QUOTA_ENFORCED || !ip) return { used: 0, remaining: AUDITS_PER_WINDOW, resetInMs: WINDOW_MS };
+  if (!QUOTA_ENFORCED || !ip) {
+    return {
+      used: 0,
+      remaining: AUDITS_PER_WINDOW,
+      chatUsed: 0,
+      chatRemaining: CHAT_MESSAGES_PER_WINDOW,
+      resetInMs: WINDOW_MS,
+    };
+  }
   const bucket = bucketFor(ip);
   return {
     used: Math.min(bucket.used, AUDITS_PER_WINDOW),
     remaining: Math.max(0, AUDITS_PER_WINDOW - bucket.used),
+    chatUsed: Math.min(bucket.chatUsed, CHAT_MESSAGES_PER_WINDOW),
+    chatRemaining: Math.max(0, CHAT_MESSAGES_PER_WINDOW - bucket.chatUsed),
     resetInMs: Math.max(0, WINDOW_MS - (Date.now() - bucket.windowStart)),
   };
 }

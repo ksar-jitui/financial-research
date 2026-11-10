@@ -454,9 +454,9 @@ async function refreshQuota() {
       return;
     }
     el.textContent = q.identified
-      ? `今日剩余额度 ${q.remaining}/${q.limit}（按 IP 计数）`
-      : `额度未能按 IP 计数（${q.limit} 次/天）`;
-    el.classList.toggle("quota-low", q.remaining === 0);
+      ? `今日剩余额度：完整审计 ${q.remaining}/${q.limit}，审讯提问 ${q.chatRemaining}/${q.chatLimit}（按 IP 计数）`
+      : `额度未能按 IP 计数（审计 ${q.limit} 次/天、提问 ${q.chatLimit} 条/天）`;
+    el.classList.toggle("quota-low", q.remaining === 0 || q.chatRemaining === 0);
   } catch {
     // 额度读数拿不到不影响主流程，但必须留下痕迹，不能显示成「没有限制」。
     el.textContent = "额度读数暂时取不到。";
@@ -1434,6 +1434,7 @@ function buildChatContext() {
     `Leader 判定：${headlineFor(D).title}。理由：${D.reason}`,
     `证据链：${D.evidence.map((e) => e.text).join("；")}`,
     "回答追问时仅依据以上审计上下文与提供的对话历史，引用具体数字与段号，不得编造证据；结论是风险预警而非违法认定。",
+    "公式与数值一律用纯文本写（如「背离度 = 语调虚高指数 − 最差一侧百分位」），不要使用 LaTeX 记号。",
   ].join("\n");
 }
 
@@ -1445,10 +1446,38 @@ function appendBubble(role, text) {
   roleSpan.className = "role";
   roleSpan.textContent = role === "user" ? "提问 · 审计人员" : "回答 · qwen-max 主审分析师";
   bubble.appendChild(roleSpan);
-  bubble.appendChild(document.createTextNode(text));
+  bubble.appendChild(document.createTextNode(role === "ai" ? plainMath(text) : text));
   log.appendChild(bubble);
   bubble.scrollIntoView({ behavior: "smooth", block: "nearest" });
   return bubble;
+}
+
+// qwen-max 有时把公式写成 LaTeX（实测：\[ \text{背离度} = \text{语调虚高指数} - ... \]），
+// 而审讯室是纯文本渲染，用户看到的就是满屏反斜杠。这里做有限还原——
+// 只处理真实出现过的常见记号，不是 LaTeX 引擎；认不出的命令只去掉反斜杠保留词形，
+// 绝不整段吞掉：宁可看到 "alpha"，也不要丢数字。
+function plainMath(text) {
+  const s = String(text ?? "");
+  if (s.indexOf("\\") < 0 && s.indexOf("$") < 0) return s;
+  return s
+    .replace(/\\\[([\s\S]*?)\\\]/g, (_m, body) => ` ${body.trim()} `)
+    .replace(/\\\(([\s\S]*?)\\\)/g, (_m, body) => ` ${body.trim()} `)
+    .replace(/\$\$([\s\S]*?)\$\$/g, (_m, body) => ` ${body.trim()} `)
+    .replace(/\$([^$\n]{1,200})\$/g, (_m, body) => ` ${body.trim()} `)
+    .replace(/\\(?:text|mathrm|mathbf|operatorname)\s*\{([^{}]*)\}/g, "$1")
+    .replace(/\\frac\s*\{([^{}]*)\}\s*\{([^{}]*)\}/g, "($1)/($2)")
+    .replace(/\\times/g, "×")
+    .replace(/\\cdot/g, "·")
+    .replace(/\\div/g, "÷")
+    .replace(/\\approx/g, "≈")
+    .replace(/\\ge(?:q)?/g, "≥")
+    .replace(/\\le(?:q)?/g, "≤")
+    .replace(/\\pm/g, "±")
+    .replace(/\\%/g, "%")
+    .replace(/\\[,;!:]/g, " ")
+    .replace(/\\([a-zA-Z]+)/g, "$1")
+    .replace(/[ \t]{2,}/g, " ")
+    .trim();
 }
 
 function renderChat() {
@@ -1488,6 +1517,9 @@ async function sendChat() {
   } finally {
     $("chat-send").disabled = false;
     input.focus();
+    // 提问单独计数之后，这行读数不刷新就会一直停在提问前的数字——
+    // 界面写出的每个额度数都必须是当下的，不能是上一次审计时的。
+    refreshQuota();
   }
 }
 
