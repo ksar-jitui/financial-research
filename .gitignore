@@ -25,14 +25,10 @@ Thumbs.db
 !.streamlit/secrets.toml.example
 
 # ---- 运行期数据：按股票代码建目录（年报 PDF、语调 txt、快照 PNG）与名录 CSV ----
-# 第三方发布内容且体积已超 29M，不入库；但别退回成整目录排除 data/，
-# 那样会把 data/ 重新变成源码位置时又挡掉代码。
+# 第三方发布内容且体积已超 29M，不入库。data_fetching.DATA_ROOT = ./data，
+# 目录由 mkdir(parents=True, exist_ok=True) 现建，所以仓库里不需要放占位目录。
 data/[0-9][0-9][0-9][0-9][0-9][0-9]/
 data/*.csv
-data_storage/pdfs/*
-data_storage/cache/*
-data_storage/exports/*
-!data_storage/**/.gitkeep
 
 # ---- 普查缓存与跑批中间产物（脚本本体保留，缓存不保留）----
 _dev/ref_rows.jsonl
