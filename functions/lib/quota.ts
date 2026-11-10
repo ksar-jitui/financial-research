@@ -24,15 +24,16 @@ export function clientIp(req: Request): { ip: string; source: string } {
 
 // 额度强度必须说清楚它是什么：这是一个 edge 实例内的进程级桶，
 // 不跨实例共享、冷启动即清零。它能挡住「打开页面挂脚本循环刷」这一类实际风险，
-// 但它不是、也不能被描述成「每个 IP 全局只有 5 次」。
+// 但它不是、也不能被描述成「每个 IP 全局只有 N 次」。
 // 真正持久的每 IP 台账需要共享状态（Sites 的 Database 能力），
 // 那要改函数形态、建表并配置访问策略，属于需要项目所有者点头的云端变更。
-// 总开关。提交版先不限制：评委和用户的访问不能被一个尽力而为的额度挡住，
-// 而这套额度目前只在单个 edge 实例内计数、重启即清零（实测：同一 IP 的连续请求曾读到 used 0 与 used 1 两种结果）。
-// 上线之后要启用，把这里改成 true 即可，计数与去重逻辑都保持原样、随时可开。
-export const QUOTA_ENFORCED = false;
+// 总开关。2026-11-10 起启用：站点公开访问后 7 天已有 35 个独立访客，
+// 完全不限流等于把模型额度敞开着挂在网上。
+// 已知弱点照实记录：实测同一 IP 的连续请求曾读到 used 0 与 used 1 两种结果，
+// 所以这是尽力而为的节流，不是硬保证；额度取 20 而不是 5，是为了让认真试用的人撞不到墙。
+export const QUOTA_ENFORCED = true;
 
-export const AUDITS_PER_WINDOW = 5;
+export const AUDITS_PER_WINDOW = 20;
 export const WINDOW_MS = 24 * 60 * 60 * 1000;
 const CLEANUP_EVERY = 256;
 
