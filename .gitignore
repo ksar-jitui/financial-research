@@ -45,3 +45,6 @@ web/
 
 # ---- Qoder Sites 部署描述文件：工具状态，含云端 ID 与 index.html 的 base64 ----
 *.qoder.site
+
+# ---- 论坛材料：开发日志与截图只用于发帖，不进代码仓库 ----
+docs/
