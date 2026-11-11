@@ -1693,5 +1693,16 @@ $("chat-input").addEventListener("keydown", (e) => {
 document.querySelectorAll(".reader-toggles input").forEach((cb) => {
   cb.addEventListener("change", () => { if (window.LEXICAL) renderReader(); });
 });
+// 方法论默认收起，但结果区有个 href="#method" 的锚点链过去——跳到一块收起的文字上等于没跳。
+// 所以凡是走锚点进来的（点链接、带 #method 的 URL、后续 hash 变化），都先展开再让浏览器滚动。
+function openMethodFold() {
+  const fold = document.querySelector(".method-fold");
+  if (fold) fold.open = true;
+}
+document.querySelectorAll('a[href="#method"]').forEach((a) => a.addEventListener("click", openMethodFold));
+if (window.location.hash === "#method") openMethodFold();
+window.addEventListener("hashchange", () => {
+  if (window.location.hash === "#method") openMethodFold();
+});
 loadBands();
 refreshQuota();

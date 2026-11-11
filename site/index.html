@@ -251,7 +251,12 @@
   </div>
 
   <section class="method" id="method" aria-label="方法论">
-    <h3>方法论 · 四 Agent 协同</h3>
+    <details class="method-fold">
+      <summary>
+        <h3 class="method-h">方法论 · 四 Agent 协同</h3>
+        <span class="method-fold-hint">判据公式、切点的实测依据、全市场普查规模、行业带与使用边界，共 10 节，默认收起</span>
+      </summary>
+      <div class="method-body">
     <ol class="method-steps">
       <li><strong>TextSentimentAgent（qwen-plus）</strong>：分块阅读 MD&A，输出 0–100「语调虚高指数」（越高表示表述越缺乏数据支撑、越可能在粉饰太平）与带段号的关键论点。</li>
       <li><strong>FinancialHealthAgent（规则引擎）</strong>：基于东方财富年报的营收、归母净利润、经营现金流、扣非净利润与 F-Score 输入，计算同比、净现比，输出两个数——<b>水平分</b>（本年度基本面）与<b>同比变化分</b>（同一套规则在少一年的窗口上重算后的差值）。Piotroski F-Score 在这里是<b>被引用的输入项</b>而不是判定锚。</li>
@@ -400,6 +405,8 @@
       千问密钥仅存于服务端 Secrets，不经前端。本工具输出的是<b>学术研究用的审计风险线索</b>，
       不是对财务舞弊的事实认定，也不构成投资建议。
     </p>
+      </div>
+    </details>
   </section>
 </main>
 
